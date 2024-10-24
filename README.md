@@ -5,7 +5,7 @@ We welcome any feedback! If you have any questions, suggestions, or ideas about 
 
 ## Project Members
 - [Gunwoo Yong](https://github.com/gwyong)
-- [Sungjoo Jang](https://github.com/sjj9090)
+- [Seongju Jang](https://github.com/sjj9090)
 
 ## License
 The license for our code will be announced in the future. Stay tuned for updates.
