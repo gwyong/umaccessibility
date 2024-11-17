@@ -156,6 +156,20 @@ def calculate_dice(mask1, mask2):
         return 0.0
     return 2 * intersection / sum_masks
 
+def remove_small_masks(masks, iou_scores, min_area=100, min_ratio=None, image_shape=None):
+    filtered_masks = []
+    filtered_scores = []
+    if min_ratio is not None and image_shape is not None:
+        total_area = image_shape[0] * image_shape[1]
+        min_area = total_area / 256
+    
+    for i, (mask, score) in enumerate(zip(masks, iou_scores)):
+        mask_area = torch.sum(mask).item()
+        if mask_area >= min_area:
+            filtered_masks.append(mask)
+            filtered_scores.append(score)
+    return filtered_masks, filtered_scores
+
 def remove_duplicate_masks(masks, iou_scores, threshold=0.95):
     unique_masks = []
     unique_scores = []

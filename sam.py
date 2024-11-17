@@ -78,8 +78,9 @@ class SAM(nn.Module):
         
         return dino_masks, dino_scores
     
-    def postprocess(self, inputs, outputs, pred_threshold=0.7, iou_threshold=0.95,
+    def postprocess(self, inputs, outputs, pred_threshold=0.7, iou_threshold=0.95, min_area=50, min_ratio=None,
                     show=False, save=True, output_dir="./output", input_image_path=None):
+        image = utils.read_image_path(input_image_path)
         masks = self.processor.image_processor.post_process_masks(
                 outputs.pred_masks.cpu(),
                 inputs["original_sizes"].cpu(),
@@ -93,9 +94,9 @@ class SAM(nn.Module):
                 filtered_masks.append(masks[0][i])
                 filtered_scores.append(outputs.iou_scores[0][i])
 
+        filtered_masks, filtered_scores = utils.remove_small_masks(filtered_masks, filtered_scores, min_area=min_area, min_ratio=min_ratio, image_shape=image.size)
         unique_masks, unique_scores = utils.remove_duplicate_masks(filtered_masks, filtered_scores, iou_threshold)
-
-        image = utils.read_image_path(input_image_path)
+        
         if save:
             image_basename = os.path.splitext(os.path.basename(input_image_path))[0]
             output_folder_path = os.path.join(output_dir, image_basename)
