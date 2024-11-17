@@ -1,5 +1,6 @@
 import os, json, shutil, math, cv2
 import torch
+import torch.nn.functional as F
 
 import pandas as pd
 import numpy as np
@@ -170,6 +171,17 @@ def remove_small_masks(masks, iou_scores, min_area=100, min_ratio=None, image_sh
             filtered_scores.append(score)
     return filtered_masks, filtered_scores
 
+def remove_large_masks(masks, iou_scores, max_ratio=0.5, image_shape=None):
+    filtered_masks = []
+    filtered_scores = []
+    max_area = max_ratio * image_shape[0] * image_shape[1]
+    for i, (mask, score) in enumerate(zip(masks, iou_scores)):
+        mask_area = torch.sum(mask).item()
+        if mask_area <= max_area:
+            filtered_masks.append(mask)
+            filtered_scores.append(score)
+    return filtered_masks, filtered_scores
+
 def remove_duplicate_masks(masks, iou_scores, threshold=0.95):
     unique_masks = []
     unique_scores = []
@@ -218,7 +230,8 @@ def save_bbox_masked_image(image, mask, output_directory, image_name, mask_numbe
     cropped_image = image_np[y_min:y_max+1, x_min:x_max+1]
     cropped_mask = mask[0, y_min:y_max+1, x_min:x_max+1]
     canvas = np.ones_like(image_np) * 255
-    
+    canvas_bbox = np.ones_like(image_np) * 255
+
     canvas_center_y, canvas_center_x = canvas.shape[0] // 2, canvas.shape[1] // 2
     cropped_center_y, cropped_center_x = cropped_image.shape[0] // 2, cropped_image.shape[1] // 2
 
@@ -230,13 +243,17 @@ def save_bbox_masked_image(image, mask, output_directory, image_name, mask_numbe
 
     cropped_mask_expanded = np.repeat(cropped_mask[:, :, np.newaxis], 3, axis=2)
     canvas[start_y:end_y, start_x:end_x][cropped_mask_expanded] = cropped_image[cropped_mask_expanded]
+    canvas_bbox[start_y:end_y, start_x:end_x] = cropped_image
 
     masked_image_pil = Image.fromarray(canvas.astype(np.uint8))
+    bbox_image_pil = Image.fromarray(canvas_bbox.astype(np.uint8))
     image_basename = os.path.splitext(image_name)[0]
     output_path = os.path.join(output_directory, image_basename)
     os.makedirs(output_path, exist_ok=True)
     output_file_path = os.path.join(output_path, f"{str(mask_number)}.png")
+    output_bbox_file_path = os.path.join(output_path, f"{str(mask_number)}_bbox.png")
     masked_image_pil.save(output_file_path)
+    bbox_image_pil.save(output_bbox_file_path)
 
 def check_word_in_text(word, text):
     if word.lower() in text.lower():
@@ -289,6 +306,24 @@ def add_label(image, label, position, color=(255, 255, 255), font_size=20):
     font = ImageFont.truetype("arial.ttf", font_size)
     draw.text(position, label, fill=color, font=font)
     return image
+
+def identify_nearest_query(query_dict, embedding_dict, top_k=3):
+        query_dict = {k: F.normalize(v, p=2, dim=-1) for k, v in query_dict.items()}
+        embedding_dict = {k: F.normalize(v, p=2, dim=-1) for k, v in embedding_dict.items()}
+        results = {}
+
+        for query_name, query_embeddings in query_dict.items():
+            distances = []
+
+            for embed_name, embedding in embedding_dict.items():
+                cos_sim = torch.matmul(query_embeddings, embedding.T).squeeze()  # (# of queries,)
+                distance_sum = cos_sim.sum().item()  # Sum of distances over all queries
+                distances.append((embed_name, distance_sum))
+
+            distances = sorted(distances, key=lambda x: x[1], reverse=True)[:top_k]
+            
+            results[query_name] = distances
+        return results
 
 def transfer_images_and_jsons(source_dir, target_dir, consider_empty_annotation=False):
     """
