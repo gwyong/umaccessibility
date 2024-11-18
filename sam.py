@@ -1,7 +1,8 @@
 import os, glob
-import torch
+import torch, torchvision
 import torch.nn as nn
 
+from PIL import Image
 from tqdm import tqdm
 from transformers import SamModel, SamProcessor, GroundingDinoForObjectDetection, GroundingDinoProcessor
 
@@ -113,6 +114,32 @@ class SAM(nn.Module):
             utils.show_masks_on_image(image, unique_masks, unique_scores, input_points[0])
         
         return unique_masks, unique_scores
+    
+    def remove_irrelevant_masks(self, pil_image, removal_list, dino_threshold=0.3, multimask_output=False):
+        removal_dict = {}
+        for removal_class in removal_list:
+            input_boxes = self.prepare_dino_boxes(pil_image, removal_class, dino_threshold=dino_threshold)
+            if len(input_boxes) != 0:
+                inputs, outputs = self.segment(pil_image, input_boxes=[input_boxes], multimask_output=multimask_output)
+                dino_masks, dino_scores = self.extract_dino_masks(inputs=inputs, outputs=outputs)
+                removal_dict[removal_class] = (dino_masks, dino_scores)
+        
+        image_tensor = torchvision.transforms.functional.pil_to_tensor(pil_image).to(device)
+        removal_mask = torch.zeros((image_tensor.shape[1], image_tensor.shape[2]), dtype=torch.bool)
+
+        for removal_class in removal_dict.keys():
+            dino_masks, _ = removal_dict[removal_class]
+            for mask in dino_masks:
+                removal_mask = removal_mask | mask  # Logical OR operation
+
+        inverted_mask = ~removal_mask
+
+        remaining_image_tensor = image_tensor.clone()
+        for channel in range(remaining_image_tensor.shape[0]):
+            remaining_image_tensor[channel] *= inverted_mask.squeeze(0).to(device)
+
+        remaining_image = Image.fromarray(remaining_image_tensor.cpu().permute(1, 2, 0).byte().numpy())
+        return remaining_image, removal_mask, removal_dict
 
 def sam_save_masks_from_images(image_paths, num_input_points=9, multimask_output=False,
                                pred_threshold=0.7, iou_threshold=0.95, output_dir="./outputs"):

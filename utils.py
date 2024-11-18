@@ -196,6 +196,20 @@ def remove_duplicate_masks(masks, iou_scores, threshold=0.95):
             unique_scores.append(score)
     return unique_masks, unique_scores
 
+def remain_relevant_masks(removal_mask, sam_output_dict):
+    removal_mask = removal_mask.float()  # Convert to float to match dino_masks if needed
+
+    for target_class, (dino_masks, dino_scores) in sam_output_dict.items():
+        processed_masks = []
+        for mask in dino_masks:
+            updated_mask = mask * (1 - removal_mask)
+            updated_mask = (updated_mask > 0).float()
+            processed_masks.append(updated_mask)
+        processed_masks = torch.stack(processed_masks)
+        
+        sam_output_dict[target_class] = (processed_masks, dino_scores)
+    return sam_output_dict
+
 def save_masked_image(image, mask, output_directory, image_name, mask_number):
     image_np = np.array(image)
     white_background = np.ones_like(image_np) * 255
