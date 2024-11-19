@@ -14,6 +14,8 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
     
     iou_dict = {}
     dice_dict = {}
+    precision_dict = {}
+    recall_dict = {}
     image_level_accuracy = {} # include (# of ground-truth, # of prediction)
     for file_name in tqdm(preds.keys(), desc="Evaluating..."):
         json_file_name = file_name.replace(".png", ".json").replace(".jpg", ".json")
@@ -28,6 +30,7 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
         for label, gt_masks in gt_mask_dict.items():
             if label not in iou_dict:
                 iou_dict[label], dice_dict[label], image_level_accuracy[label] = [], [], {"gt": 0, "pred": 0}
+                precision_dict[label], recall_dict[label] = [], []
             if label in preds[file_name]:
                 pred_masks, pred_scores = preds[file_name][label]
                 combined_gt_mask = torch.any(torch.from_numpy(gt_masks), dim=0, keepdim=True)[0]
@@ -38,6 +41,10 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
                 iou_dict[label].append(iou)
                 dice = utils.calculate_dice(combined_gt_mask, combined_pred_mask)
                 dice_dict[label].append(dice)
+                precision = utils.calculate_pixel_precision(combined_gt_mask, combined_pred_mask)
+                precision_dict[label].append(precision)
+                recall = utils.calculate_pixel_recall(combined_gt_mask, combined_pred_mask)
+                recall_dict[label].append(recall)
                 image_level_accuracy[label]["gt"] += 1
                 image_level_accuracy[label]["pred"] += 1
                 
@@ -57,6 +64,8 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
             else:
                 iou_dict[label].append(0)
                 dice_dict[label].append(0)
+                precision_dict[label].append(0)
+                recall_dict[label].append(0)
                 image_level_accuracy[label]["gt"] += 1
                 if visualize:
                     combined_gt_mask = torch.any(torch.from_numpy(gt_mask_dict[label]), dim=0, keepdim=True)[0]
@@ -109,6 +118,26 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
         count += 1
     print(f"Average DICE: {avg_dices/count:.4f}\n")
 
+    avg_precisions, count = 0, 0
+    for label, precisions in precision_dict.items():
+        if len(precisions) == 0:
+            print(f"{label}: NO PRECISIONs")
+            continue
+        print(f"{label}: {sum(precisions)/len(precisions):.4f}")
+        avg_precisions += sum(precisions)/len(precisions)
+        count += 1
+    print(f"Average Precision: {avg_precisions/count:.4f}\n")
+
+    avg_recalls, count = 0, 0
+    for label, recalls in recall_dict.items():
+        if len(recalls) == 0:
+            print(f"{label}: NO RECALLs")
+            continue
+        print(f"{label}: {sum(recalls)/len(recalls):.4f}")
+        avg_recalls += sum(recalls)/len(recalls)
+        count += 1
+    print(f"Average Recall: {avg_recalls/count:.4f}\n")
+
     avg_acc_list = []
     for label, acc in image_level_accuracy.items():
         if acc["gt"] == 0:
@@ -122,7 +151,6 @@ def evaluation(sam_output_path, test_folder_path, visualize=False, visualize_out
 if __name__ == "__main__":
     sam_output_path = "./outputs/sam_output.pickle"
     test_folder_path = "data/total"
-    visualize_output_path="./outputs/visualized/baseline/v1"
+    visualize_output_path="./outputs/visualized/baseline/v5"
     visualize = True
     evaluation(sam_output_path, test_folder_path, visualize=visualize, visualize_output_path=visualize_output_path)
-    

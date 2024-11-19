@@ -157,6 +157,20 @@ def calculate_dice(mask1, mask2):
         return 0.0
     return 2 * intersection / sum_masks
 
+def calculate_pixel_precision(mask1, mask2):
+    true_positive = torch.logical_and(mask1, mask2).sum().item()
+    predicted_positive = mask1.sum().item()
+    if predicted_positive == 0:
+        return 0.0
+    return true_positive / predicted_positive
+
+def calculate_pixel_recall(mask1, mask2):
+    true_positive = torch.logical_and(mask1, mask2).sum().item()
+    actual_positive = mask2.sum().item()
+    if actual_positive == 0:
+        return 0.0
+    return true_positive / actual_positive
+
 def remove_small_masks(masks, iou_scores, min_area=100, min_ratio=None, image_shape=None):
     filtered_masks = []
     filtered_scores = []
